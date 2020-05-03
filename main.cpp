@@ -5,6 +5,9 @@
 #include <stdint.h>
 #include <omp.h>
 
+#include <mmintrin.h>
+#include <xmmintrin.h>
+
 typedef uint8_t  u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
@@ -50,8 +53,8 @@ u32 find_primes_seq(u32 begin, u32 end, u32 *primes, u32 *primes_begin) {
 void find_primes_seq_v2(u32 begin, u32 end, u8 *primes) {
     u32 sqrt_end = sqrt(end);
     u32 *base_primes = ((u32 *)primes) + end/4 + 2;
-    u32 stub;
-    u32 base_prime_count = find_primes_seq(2, sqrt_end, base_primes, &stub);
+    u32 ignore;
+    u32 base_prime_count = find_primes_seq(2, sqrt_end, base_primes, &ignore);
 
     for (u32 i = begin; i <= end; i++) {
         for (u32 j = 0; j < base_prime_count; j++) {
@@ -65,13 +68,20 @@ void find_primes_seq_v2(u32 begin, u32 end, u8 *primes) {
     }
 }
 
+#define DEBUG_PARALLEL
 
 u32 find_primes_parallel(u32 begin, u32 end, u32 *primes) {
+#ifdef DEBUG_PARALLEL
+    auto t1 = omp_get_wtime();
+#endif
     u32 prime_count = 0;
 
     u32 sqrt_end = sqrt(end);
-    u32 stub;
-    prime_count = find_primes_seq(2, sqrt_end, primes, &stub);
+    u32 ignore;
+    prime_count = find_primes_seq(2, sqrt_end, primes, &ignore);
+#ifdef DEBUG_PARALLEL
+    auto t2 = omp_get_wtime();
+#endif
 
 #pragma omp parallel shared(prime_count)
     {
@@ -92,7 +102,10 @@ u32 find_primes_parallel(u32 begin, u32 end, u32 *primes) {
             }
         }
     }
-
+#ifdef DEBUG_PARALLEL
+    auto t3 = omp_get_wtime();
+    printf("sequential %fs of all %f (%f%%)\n", t2-t1, t3-t1, 100.0*(t2-t1)/(t3-t1));
+#endif
 
     return prime_count;
 }
@@ -101,8 +114,8 @@ u32 find_primes_parallel_v3(u32 begin, u32 end, u32 *primes) {
     u32 prime_count = 0;
 
     u32 sqrt_end = sqrt(end);
-    u32 stub;
-    prime_count = find_primes_seq(2, sqrt_end, primes, &stub);
+    u32 ignore;
+    prime_count = find_primes_seq(2, sqrt_end, primes, &ignore);
 
 #pragma omp parallel shared(prime_count)
     {
@@ -139,8 +152,8 @@ u32 find_primes_parallel_v3(u32 begin, u32 end, u32 *primes) {
 void find_primes_parallel_v2(u32 begin, u32 end, u8 *primes) {
     u32 sqrt_end = sqrt(end);
     u32 *base_primes = ((u32 *)primes) + end/4 + 2;
-    u32 stub;
-    u32 base_prime_count = find_primes_seq(2, sqrt_end, base_primes, &stub);
+    u32 ignore;
+    u32 base_prime_count = find_primes_seq(2, sqrt_end, base_primes, &ignore);
     end++;
 
 #pragma omp parallel
@@ -166,7 +179,6 @@ void find_primes_parallel_v2(u32 begin, u32 end, u8 *primes) {
         }
     }
 }
-
 
 void find_primes_sieve_seq(u32 begin, u32 end, u8 *primes) {
     u32 sqrt_end = sqrt(end);
@@ -198,7 +210,7 @@ void find_primes_sieve_domain(u32 begin, u32 end, u8 *primes) {
     find_primes_sieve_seq(2, sqrt_end, primes);
     begin = max(sqrt_end+1, begin);
 
-#pragma omp parallel shared(primes)
+#pragma omp parallel
     {
         u32 work_per_thread = (end-begin) / omp_get_num_threads() + 1;
         u32 thread_begin = begin + work_per_thread*omp_get_thread_num();
@@ -227,18 +239,12 @@ void find_primes_sieve_functional(u32 begin, u32 end, u8 *primes) {
         }
     }
 
-#pragma omp parallel shared(primes, base_primes)
+#pragma omp parallel
     {
-        u32 work_per_thread = base_prime_count / omp_get_num_threads() + 1;
-        u32 thread_begin = work_per_thread*omp_get_thread_num();
-        u32 thread_end = thread_begin + work_per_thread;
-        if (thread_end > base_prime_count)
-            thread_end = base_prime_count;
-#if 0
-        printf("thread %d starts at %d(%d), ends at %d(%d)\n", omp_get_thread_num(), thread_begin, base_primes[thread_begin], thread_end-1, base_primes[thread_end-1]);
-#endif
+        u32 thread_begin = omp_get_thread_num();
+        u32 thread_end = base_prime_count;
 
-        for (u32 i = thread_begin; i < thread_end; i++) {
+        for (u32 i = thread_begin; i < thread_end; i += omp_get_num_threads()) {
             u32 prime = base_primes[i];
             u32 start = begin-1 + prime - ((begin-1) % prime);
             start = max(start, prime+prime);
@@ -274,8 +280,8 @@ void find_primes_sieve_seq_v2(u32 begin, u32 end, u8 *primes) {
     }
 }
 
-#define get_bit(a, i) (a[i>>3] & (1 << (i&7)))
-#define set_bit(a, i) (a[i>>3] |= (1 << (i&7)))
+#define get_bit(a, i) ((a)[(i)>>3] & (1 << ((i)&7)))
+#define set_bit(a, i) ((a)[(i)>>3] |= (1 << ((i)&7)))
 
 void find_primes_sieve_seq_v3(u32 begin, u32 end, u8 *primes) {
     u32 sqrt_end = sqrt(end);
@@ -331,10 +337,11 @@ void find_primes_sieve_seq_v4_no_init(u32 begin, u32 end, u8 *primes) {
 
     for (u32 i = 3; i <= sqrt_end; i+=2) {
         if (!get_bit(primes, i>>1)) {
-            u32 start = begin-1 + i - ((begin-1) % i);
+            u32 start = i * ((begin-1)/i + 1);
             start += i * ((start & 1) == 0);
             for (u32 j = start; j <= end; j += i+i) {
                 set_bit(primes, j>>1);
+                _mm_prefetch((char *)(primes+((j+32*i)>>4)), _MM_HINT_T0);
             }
         }
     }
@@ -349,7 +356,6 @@ void find_primes_sieve_domain_v2(u32 begin, u32 end, u8 *primes) {
     begin = max(sqrt_end+1, begin);
     begin ^= (begin & 7);
     end++;
-    omp_set_num_threads(4);
 
 #pragma omp parallel
     {
@@ -364,19 +370,8 @@ void find_primes_sieve_domain_v2(u32 begin, u32 end, u8 *primes) {
         auto start_time = omp_get_wtime();
 #endif
 
-#if 0
-        for (u32 i = 3; i <= sqrt_end; i+=2) {
-            if (!get_bit(primes, i>>1)) {
-                u32 start = thread_begin-1 + i - ((thread_begin-1) % i);
-                start += i * ((start & 1) == 0);
-                for (u32 j = start; j < thread_end; j += i+i) {
-                    set_bit(primes, j>>1);
-                }
-            }
-        }
-#else
         find_primes_sieve_seq_v4_no_init(thread_begin, thread_end-1, primes);
-#endif
+
 #ifdef DEBUG_SIEVE_V2
         auto end_time = omp_get_wtime();
         printf("thread %d took %f seconds\n", omp_get_thread_num(), end_time-start_time);
@@ -391,37 +386,32 @@ int main() {
     void *memory = malloc(1024*1024*1024);
     memset(memory, 0, 1024*1024*1024);
     u8 *primes = (u8 *)memory;
-    test_sieve_domain_v2(memory);
-#if 0
-    auto start_time = omp_get_wtime();
-    find_primes_sieve_domain_v2(2, 4000000000, primes);
-    auto end_time = omp_get_wtime();
-    u32 prime_count = 0;
-    for (u32 i = 2; i <= 4000000000; i++) {
-        if (i==2 || ((i&1) && !get_bit(primes, i/2))) {
-            prime_count++;
-        }
-    }
-    printf("found %d primes in %f seconds\n", prime_count, end_time-start_time);
-#else
-    //find_primes_sieve_domain_v2(2, 4000000000, primes);
+
+    u32 ignore;
+    u32 count = find_primes_seq(2, 500, (u32 *)primes, &ignore);
+    print_list((u32 *)primes, count);
+    memset(memory, 0, 1024);
+
+    find_primes_sieve_seq(2, 500, primes);
+    print_sieve(primes, 2, 500);
+    memset(memory, 0, 1024);
+
+    find_primes_sieve_seq_v2(2, 500, primes);
+    print_sieve_v2(primes, 2, 500);
+    memset(memory, 0, 1024);
+
+    find_primes_sieve_seq_v3(2, 500, primes);
+    print_sieve_v3(primes, 2, 500);
+    memset(memory, 0, 1024);
+
+    find_primes_sieve_seq_v4(2, 500, primes);
+    print_sieve_v4(primes, 2, 500);
+    memset(memory, 0, 1024);
+
+    //find_primes_sieve_domain(2, 1000000000, primes);
+    //find_primes_sieve_domain_v2(2000000000, 4000000000, primes);
+    //find_primes_sieve_functional(2, 1000000000, primes);
     //find_primes_sieve_domain(2, 1000000000, primes);
     //find_primes_sieve_seq_v4(2, 4000000000, primes);
-#endif
-
-#if 0
-#pragma omp parallel sections
-    {
-#pragma omp section
-        find_primes_sieve_seq_v4(31616, 250023719, primes);
-#pragma omp section
-        find_primes_sieve_seq_v4(250023720, 500015823, primes);
-#pragma omp section
-        find_primes_sieve_seq_v4(500015824, 750007927, primes);
-#pragma omp section
-        find_primes_sieve_seq_v4(750007928, 1000000000, primes);
-    }
-#endif
-
     return 0;
 }

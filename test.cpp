@@ -1,3 +1,82 @@
+void print_list(u32 *list, u32 length, u32 start = 0) {
+    u32 printed_count = 0;
+    for (u32 i = start; i < length; i++) {
+        printf("%u\t", list[i]);
+        printed_count++;
+        if (printed_count % 10 == 0) {
+            puts("");
+        }
+    }
+    puts("");
+}
+
+u32 print_sieve(u8 *sieve, u32 start, u32 end) {
+    u32 prime_count = 0;
+    for (u32 i = start; i <= end; i++) {
+        if (!sieve[i]) {
+            printf("%u\t", i);
+            prime_count++;
+            if (prime_count % 10 == 0) {
+                puts("");
+            }
+        }
+    }
+    puts("");
+
+    return prime_count;
+}
+
+u32 print_sieve_v2(u8 *sieve, u32 start, u32 end) {
+    u32 prime_count = 0;
+    for (u32 i = start; i <= end; i++) {
+        if (i == 2 || ((i&1) && !sieve[i>>1])) {
+            printf("%u\t", i);
+            prime_count++;
+            if (prime_count % 10 == 0) {
+                puts("");
+            }
+        }
+    }
+    puts("");
+
+    return prime_count;
+}
+
+u32 print_sieve_v3(u8 *sieve, u32 start, u32 end) {
+    u32 prime_count = 0;
+    for (u32 i = start; i <= end; i++) {
+        if (!get_bit(sieve, i)) {
+            printf("%u\t", i);
+            prime_count++;
+            if (prime_count % 10 == 0) {
+                puts("");
+            }
+        }
+    }
+    puts("");
+
+    return prime_count;
+}
+
+u32 print_sieve_v4(u8 *sieve, u32 start, u32 end) {
+    u32 prime_count = 0;
+    for (u32 i = start; i <= end; i++) {
+        if (i == 2 || ((i&1) && !get_bit(sieve, i>>1))) {
+            printf("%u\t", i);
+            prime_count++;
+            if (prime_count % 10 == 0) {
+                puts("");
+            }
+        }
+    }
+    puts("");
+
+    return prime_count;
+}
+
+
+// debug functions
+
 void test_find_seq(void *memory) {
     u32 *primes = (u32 *)memory;
 
@@ -56,7 +135,7 @@ void test_find_parallel(void *memory) {
 
     puts("test find_primes_parallel from 2 to 10000000");
     auto start_time = omp_get_wtime();
-    u32 count = find_primes_parallel(2, 10000000, primes);
+    u32 count = find_primes_parallel(2, 1000000, primes);
     auto end_time = omp_get_wtime();
     printf("%d\n", count);
     printf("time: %f\n", end_time-start_time);
@@ -101,6 +180,18 @@ void test_find_parallel_v2(void *memory) {
     }
     printf("found %d primes in %f seconds\n", prime_count, end_time-start_time);
     puts("");
+}
+
+
+void test_find_parallel_v3(void *memory) {
+    u32 *primes = (u32 *)memory;
+
+    puts("test find_primes_parallel_v3 from 2 to 10000000");
+    auto start_time = omp_get_wtime();
+    u32 count = find_primes_parallel_v3(2, 10000000, primes);
+    auto end_time = omp_get_wtime();
+    printf("%d\n", count);
+    printf("time: %f\n", end_time-start_time);
 }
 
 void test_sieve_seq(void *memory) {
@@ -341,9 +432,9 @@ void test_sieve_domain_v2(void *memory) {
     }
     puts("");
 
-    u32 max = 100000000;
+    u32 max = 4000000000;
 
-    puts("testing find_primes_sieve_domain_v2 from 2 to 1000000000");
+    printf("testing find_primes_sieve_domain_v2 from 2 to %u\n", max);
     memset(primes, 0, 1000000000);
     auto start_time = omp_get_wtime();
     find_primes_sieve_domain_v2(2, max, primes);
@@ -355,56 +446,12 @@ void test_sieve_domain_v2(void *memory) {
         }
     }
     printf("found %d primes in %f seconds\n", prime_count, end_time-start_time);
+}
 
-    puts("testing find_primes_sieve_domain_v2 from 2 to 1000000000");
-    memset(primes, 0, 1000000000);
-    start_time = omp_get_wtime();
-    find_primes_sieve_seq_v4(2, max, primes);
-    end_time = omp_get_wtime();
-    prime_count = 0;
-    for (u32 i = 2; i <= max; i++) {
-        if (i==2 || ((i&1) && !get_bit(primes, i/2))) {
-            prime_count++;
-        }
-    }
-    printf("found %d primes in %f seconds\n", prime_count, end_time-start_time);
+void spam_csv(void *memory) {
 
-
-#if 0
-    memset(primes, 0, 1000000000);
-    start_time = omp_get_wtime();
-    find_primes_sieve_seq_v4(2, 1000000000, primes);
-    end_time = omp_get_wtime();
-    prime_count = 0;
-    for (u32 i = 2; i <= 1000000000; i++) {
-        if (i==2 || ((i&1) && !get_bit(primes, i/2))) {
-            prime_count++;
-        }
-    }
-    printf("found %d primes in %f seconds\n", prime_count, end_time-start_time);
-#endif
-#if 0
-    puts("testing hardcoded parallism from 2 to 1000000000");
-    memset(primes, 0, 1000000000);
-    start_time = omp_get_wtime();
-#pragma omp parallel sections
-    {
-#pragma omp section
-        find_primes_sieve_seq_v4(31616, 250023719, primes);
-#pragma omp section
-        find_primes_sieve_seq_v4(250023720, 500015823, primes);
-#pragma omp section
-        find_primes_sieve_seq_v4(500015824, 750007927, primes);
-#pragma omp section
-        find_primes_sieve_seq_v4(750007928, 1000000000, primes);
-    }
-    end_time = omp_get_wtime();
-    prime_count = 0;
-    for (u32 i = 2; i <= 1000000000; i++) {
-        if (i==2 || ((i&1) && !get_bit(primes, i/2))) {
-            prime_count++;
-        }
-    }
-    printf("found %d primes in %f seconds\n", prime_count, end_time-start_time);
-#endif
+    find_primes_sieve_functional(2, 1000000000, primes);
+    find_primes_sieve_domain(2, 1000000000, primes);
+    find_primes_sieve_domain_v2(2000000000, 4000000000, primes);
+    find_primes_sieve_seq_v4(2, 4000000000, primes);
 }
